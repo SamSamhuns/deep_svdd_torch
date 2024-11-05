@@ -1,4 +1,5 @@
 import torch
+import matplotlib.pyplot as plt
 
 
 def weights_init_normal(m):
@@ -16,3 +17,18 @@ def global_contrast_normalization(x):
     x_scale = torch.mean(torch.abs(x))
     x /= x_scale
     return x
+
+
+def plot_in_out_dist(in_df, out_df, savepath: str = "outlier_scores_deep_svdd.jpg"):
+    """
+    Plot the in vs the out distributions
+    """
+    _, ax = plt.subplots()
+    in_df.plot.kde(ax=ax, legend=True, title='Outliers vs Inliers (Deep SVDD)')
+    out_df.plot.kde(ax=ax, legend=True)
+    plt.xlim(-0.05, 0.08)
+    ax.grid(axis='x')
+    ax.grid(axis='y')
+
+    print(f"Saving in_vs_out dist to {savepath}")
+    plt.savefig(savepath)
