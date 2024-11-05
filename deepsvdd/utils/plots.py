@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def plot_in_out_dist(in_df: pd.DataFrame,
                      out_df: pd.DataFrame,
-                     savepath: str = "outlier_scores_deep_svdd.jpg"):
+                     savepath: str = "plots/outlier_scores_deep_svdd.jpg"):
     """
     Plot the in_vs_out KDE distributions
     """
@@ -20,6 +20,8 @@ def plot_in_out_dist(in_df: pd.DataFrame,
 
     print(f"Saving in_vs_out dist to {savepath}")
     plt.savefig(savepath)
+    plt.clf()
+    plt.close()
 
 
 def plot_metric(metrics_lists: List[List[Union[int, float]]],
@@ -46,3 +48,5 @@ def plot_metric(metrics_lists: List[List[Union[int, float]]],
     # Set x-ticks to show only whole numbers
     plt.xticks(np.arange(0, max_metric_len + 1, step=1))
     plt.savefig(savepath, dpi=300)
+    plt.clf()
+    plt.close()
