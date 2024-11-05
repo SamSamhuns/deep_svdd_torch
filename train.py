@@ -1,3 +1,4 @@
+import os
 import argparse
 import torch
 import pandas as pd
@@ -5,7 +6,7 @@ import numpy as np
 
 from deepsvdd.trainer import TrainerDeepSVDD
 from deepsvdd.preprocess import get_mnist_dls
-from deepsvdd.utils.plots import plot_in_out_dist
+from deepsvdd.utils.plots import plot_in_out_dist, plot_tsne_2d, plot_scatter_loss
 
 
 def parse_args():
@@ -34,9 +35,7 @@ def parse_args():
                         help="Dimension of the latent variable z (default: %(default)s)")
     parser.add_argument("--normal_class", type=int, default=0,
                         help="Class to be treated as normal; the rest is set as anomalous (default: %(default)s)")
-    # parsing arguments.
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -46,21 +45,35 @@ if __name__ == "__main__":
 
     dls = get_mnist_dls(args)
     deep_SVDD = TrainerDeepSVDD(args, dls, device)
-    # pretrain with encoder and decoder
+    # pretrain with autoencoder
     if args.pretrain:
         deep_SVDD.pretrain()
+        # eval autoencoder
+        recons_losses, y_trues = deep_SVDD.eval_ae()
+        plot_scatter_loss(recons_losses, y_trues,
+                          savepath="plots/recons_test_losses_ae.jpg")
+
     # train encoder only
     deep_SVDD.train()
 
+    os.makedirs('./plots', exist_ok=True)
     # evaluate encoder
     thres = deep_SVDD.calc_threshold_score(
         deep_SVDD.train_loader, deep_SVDD.encoder)
-    labels, scores = deep_SVDD.eval_enc(thres)
+    y_trues, y_scores, y_preds, z_embs = deep_SVDD.eval_enc(thres)
 
     # plot the distribution of the inlier/outlier scores
-    scores_in = scores[np.where(labels == 0)[0]]
-    scores_out = scores[np.where(labels == 1)[0]]
+    scores_in = y_scores[np.where(y_trues == 0)[0]]
+    scores_out = y_scores[np.where(y_trues == 1)[0]]
 
     in_ = pd.DataFrame(scores_in, columns=['Inlier'])
     out_ = pd.DataFrame(scores_out, columns=['Outlier'])
-    plot_in_out_dist(in_, out_)
+    plot_in_out_dist(in_, out_,
+                     savepath="plots/outlier_scores_deep_svdd.jpg")
+    # plot the t-sne plots
+    plot_tsne_2d(z_embs, y_trues,
+                 savepath="plots/tsne_mnist_true.jpg",
+                 title="t-SNE - MNIST")
+    plot_tsne_2d(z_embs, y_preds,
+                 savepath="plots/tsne_mnist_pred.jpg",
+                 title="t-SNE - MNIST")

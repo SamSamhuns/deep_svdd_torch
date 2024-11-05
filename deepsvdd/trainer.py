@@ -1,12 +1,12 @@
 import os
 import torch
 from torch import optim
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score, accuracy_score, balanced_accuracy_score
 import numpy as np
-
 
 from deepsvdd.model import autoencoder, encoder
 from deepsvdd.utils.common import weights_init_normal
+from deepsvdd.utils.plots import plot_metric
 
 
 class TrainerDeepSVDD:
@@ -14,6 +14,7 @@ class TrainerDeepSVDD:
         self.args = args
         self.train_loader, self.test_loader = dls
         self.device = device
+        self.ae = autoencoder(self.args.latent_dim).to(self.device)
         self.encoder = encoder().to(self.device)
         self.c = None
 
@@ -26,7 +27,7 @@ class TrainerDeepSVDD:
         self.encoder.load_state_dict(state_dict, strict=False)
         torch.save({"center": c.cpu().data.numpy().tolist(),
                     "net_dict": self.encoder.state_dict()}, "weights/pretrained_parameters.pth")
-   
+
     def save_enc_weights(self, model, epoch):
         """Saving the Deep SVDD encoder model weights"""
         os.makedirs("weights", exist_ok=True)
@@ -71,14 +72,14 @@ class TrainerDeepSVDD:
 
     def pretrain(self):
         """ Pretraining the weights for the deep SVDD network using autoencoder"""
-        ae = autoencoder(self.args.latent_dim).to(self.device)
-        ae.apply(weights_init_normal)
-        optimizer = optim.Adam(ae.parameters(), lr=self.args.lr_ae,
+        self.ae.apply(weights_init_normal)
+        optimizer = optim.Adam(self.ae.parameters(), lr=self.args.lr_ae,
                                weight_decay=self.args.weight_decay_ae)
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
                                                    milestones=self.args.lr_milestones, gamma=0.1)
 
-        ae.train()
+        epoch_loss, epoch_lr = [], []
+        self.ae.train()
         print("Pretraining Autoencoder...")
         for epoch in range(self.args.num_epochs_ae):
             total_loss = 0
@@ -86,7 +87,7 @@ class TrainerDeepSVDD:
                 x = x.float().to(self.device)
 
                 optimizer.zero_grad()
-                x_hat = ae(x)
+                x_hat = self.ae(x)
                 reconst_loss = torch.mean(
                     torch.sum((x_hat - x) ** 2, dim=tuple(range(1, x_hat.dim()))))
                 reconst_loss.backward()
@@ -94,9 +95,38 @@ class TrainerDeepSVDD:
 
                 total_loss += reconst_loss.item()
             scheduler.step()
-            print(f"AE Epoch: {epoch}, Loss: {
-                  total_loss/len(self.train_loader):.3f}")
-        self.save_ae_weights(ae, self.train_loader)
+            avg_epoch_loss = total_loss / len(self.train_loader)
+            epoch_loss.append(avg_epoch_loss)
+            epoch_lr.append(scheduler.get_last_lr()[0])
+
+            print(f"AE Epoch: {epoch}, Loss: {avg_epoch_loss:.3f}")
+        self.save_ae_weights(self.ae, self.train_loader)
+        # plot training loss and lr
+        os.makedirs("plots", exist_ok=True)
+        plot_metric(
+            [epoch_loss], labels=["AE Loss"],
+            title="Train AE Loss over epochs", savepath="plots/ae_loss.jpg")
+        plot_metric(
+            [epoch_lr], labels=["AE LR"],
+            title="AE LR over epochs", savepath="plots/ae_lr.jpg")
+
+    def eval_ae(self):
+        """Evaluate the autoencoder"""
+        self.ae.eval()
+        print("Testing Autoencoder model...")
+        recons_losses = []
+        y_trues = []
+        with torch.no_grad():
+            for x, y in self.test_loader:
+                x = x.float().to(self.device)
+                x_hat = self.ae(x)
+                recons_loss = torch.sum(
+                    (x_hat - x) ** 2, dim=tuple(range(1, x_hat.dim())))
+                recons_losses.append(recons_loss.cpu())
+                y_trues.append(y)
+        recons_losses = torch.cat(recons_losses).numpy()
+        y_trues = torch.cat(y_trues).numpy()
+        return recons_losses, y_trues
 
     def train(self):
         """Training the Deep SVDD model"""
@@ -114,6 +144,7 @@ class TrainerDeepSVDD:
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
                                                    milestones=self.args.lr_milestones, gamma=0.1)
 
+        epoch_loss, epoch_lr = [], []
         self.encoder.train()
         print("Training Deep SVDD...")
         for epoch in range(self.args.num_epochs):
@@ -129,15 +160,27 @@ class TrainerDeepSVDD:
 
                 total_loss += loss.item()
             scheduler.step()
-            print(f"Enc Epoch: {epoch}, Loss: {total_loss/len(self.train_loader):.3f}")
+            print(f"Enc Epoch: {epoch}, Loss: {
+                  total_loss/len(self.train_loader):.3f}")
         self.c = c
         self.save_enc_weights(self.encoder, epoch)
+
+        # plot training loss and lr
+        os.makedirs("plots", exist_ok=True)
+        plot_metric(
+            [epoch_loss], labels=["AE Loss"],
+            title="Train Enc Loss over epochs", savepath="plots/ae_loss.jpg")
+        plot_metric(
+            [epoch_lr], labels=["AE LR"],
+            title="AE Enc over epochs", savepath="plots/ae_lr.jpg")
 
     def eval_enc(self, threshold: float = 0.5):
         """Evaluate the Deep SVDD encoder model"""
 
-        scores = []
-        labels = []
+        y_scores = []
+        y_trues = []
+        y_preds = []
+        z_embs = []
         self.encoder.eval()
         print("Testing Deep SVDD...")
         print(f"Using a clsf threshold of {threshold}")
@@ -145,13 +188,20 @@ class TrainerDeepSVDD:
             for x, y in self.test_loader:
                 x = x.float().to(self.device)
                 z = self.encoder(x)
-                score = torch.sum((z - self.c) ** 2, dim=1)
+                y_score = torch.sum((z - self.c) ** 2, dim=1)
 
-                scores.append(score.detach().cpu())
-                labels.append(y.cpu())
+                y_trues.append(y.cpu())
+                y_scores.append(y_score.cpu())
+                y_preds.append(y_score.cpu() > threshold)
+                z_embs.append(z.cpu())
 
-        labels, scores = torch.cat(labels).numpy(), torch.cat(scores).numpy()
-        print(f"ROC AUC score: {roc_auc_score(labels, scores)*100:.2f}")
-        print(f"Accuracy score: {accuracy_score(labels, scores > threshold)*100:.2f}")
+        y_scores = torch.cat(y_scores).numpy()
+        y_trues = torch.cat(y_trues).numpy()
+        y_preds = torch.cat(y_preds).numpy()
+        z_embs = torch.cat(z_embs).numpy()
+        print(f"ROC AUC score: {roc_auc_score(y_trues, y_scores)*100:.2f}")
+        print(f"Accuracy score: {accuracy_score(y_trues, y_preds)*100:.2f}")
+        print(f"Balanced accuracy score: {
+              balanced_accuracy_score(y_trues, y_preds)*100:.2f}")
 
-        return labels, scores
+        return y_trues, y_scores, y_preds, z_embs
