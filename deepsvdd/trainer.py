@@ -5,8 +5,8 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 import numpy as np
 
 
-from model import autoencoder, encoder
-from utils.utils import weights_init_normal
+from deepsvdd.model import autoencoder, encoder
+from deepsvdd.utils.common import weights_init_normal
 
 
 class TrainerDeepSVDD:

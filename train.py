@@ -3,9 +3,9 @@ import torch
 import pandas as pd
 import numpy as np
 
-from trainer import TrainerDeepSVDD
-from preprocess import get_mnist_dls
-from utils.utils import plot_in_out_dist
+from deepsvdd.trainer import TrainerDeepSVDD
+from deepsvdd.preprocess import get_mnist_dls
+from deepsvdd.utils.plots import plot_in_out_dist
 
 
 def parse_args():
@@ -57,6 +57,7 @@ if __name__ == "__main__":
         deep_SVDD.train_loader, deep_SVDD.encoder)
     labels, scores = deep_SVDD.eval_enc(thres)
 
+    # plot the distribution of the inlier/outlier scores
     scores_in = scores[np.where(labels == 0)[0]]
     scores_out = scores[np.where(labels == 1)[0]]
 

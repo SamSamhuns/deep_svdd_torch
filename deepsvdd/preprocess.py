@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 
 from PIL import Image
 
-from utils.utils import global_contrast_normalization
+from deepsvdd.utils.common import global_contrast_normalization
 
 
 class MNIST_loader(data.Dataset):
