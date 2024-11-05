@@ -14,7 +14,7 @@ pip install -r requirements.txt
 ## Sample Train and Test
 
 ```bash
-python sample_train_test.py
+python train.py  # train test deep svdd with default parameters for MNIST data
 ```
 
 # Results
