@@ -10,28 +10,27 @@ from deepsvdd.utils.plots import plot_metric
 
 
 class TrainerDeepSVDD:
-    def __init__(self, args, dls, device):
+    def __init__(self, args, dls, log_dir, device):
         self.args = args
         self.train_loader, self.test_loader = dls
         self.device = device
         self.ae = autoencoder(self.args.latent_dim).to(self.device)
         self.encoder = encoder().to(self.device)
         self.c = None
+        self.log_dir = log_dir
 
     def save_ae_weights(self, model, dataloader):
         """Initialize Deep SVDD weights using the encoder weights of the pretrained autoencoder."""
-        os.makedirs("weights", exist_ok=True)
         c = self.set_c(model, dataloader)
         self.encoder = encoder(self.args.latent_dim).to(self.device)
         state_dict = model.state_dict()
         self.encoder.load_state_dict(state_dict, strict=False)
         torch.save({"center": c.cpu().data.numpy().tolist(),
-                    "net_dict": self.encoder.state_dict()}, "weights/pretrained_parameters.pth")
+                    "net_dict": self.encoder.state_dict()}, f"{self.log_dir}/pretrained_ae.pth")
 
     def save_enc_weights(self, model, epoch):
         """Saving the Deep SVDD encoder model weights"""
-        os.makedirs("weights", exist_ok=True)
-        torch.save(model.state_dict(), f"weights/model_epoch_{epoch}.pth")
+        torch.save(model.state_dict(), f"{self.log_dir}/model_epoch_{epoch}.pth")
 
     def set_c(self, model, dataloader, eps=0.1):
         """Initializing the center for the hypersphere"""
@@ -102,13 +101,13 @@ class TrainerDeepSVDD:
             print(f"AE Epoch: {epoch}, Loss: {avg_epoch_loss:.3f}")
         self.save_ae_weights(self.ae, self.train_loader)
         # plot training loss and lr
-        os.makedirs("plots", exist_ok=True)
+        os.makedirs(self.log_dir, exist_ok=True)
         plot_metric(
             [epoch_loss], labels=["AE Loss"],
-            title="Train AE Loss over epochs", savepath="plots/ae_loss.jpg")
+            title="Train AE Loss over epochs", savepath=f"{self.log_dir}/ae_loss.jpg")
         plot_metric(
             [epoch_lr], labels=["AE LR"],
-            title="AE LR over epochs", savepath="plots/ae_lr.jpg")
+            title="AE LR over epochs", savepath=f"{self.log_dir}/ae_lr.jpg")
 
     def eval_ae(self):
         """Evaluate the autoencoder"""
@@ -132,7 +131,7 @@ class TrainerDeepSVDD:
         """Training the Deep SVDD model"""
 
         if self.args.pretrain is True:
-            state_dict = torch.load("weights/pretrained_parameters.pth")
+            state_dict = torch.load(f"{self.log_dir}/pretrained_ae.pth")
             self.encoder.load_state_dict(state_dict["net_dict"])
             c = torch.Tensor(state_dict["center"]).to(self.device)
         else:
@@ -166,13 +165,13 @@ class TrainerDeepSVDD:
         self.save_enc_weights(self.encoder, epoch)
 
         # plot training loss and lr
-        os.makedirs("plots", exist_ok=True)
+        os.makedirs(self.log_dir, exist_ok=True)
         plot_metric(
             [epoch_loss], labels=["AE Loss"],
-            title="Train Enc Loss over epochs", savepath="plots/ae_loss.jpg")
+            title="Train Enc Loss over epochs", savepath=f"{self.log_dir}/ae_loss.jpg")
         plot_metric(
             [epoch_lr], labels=["AE LR"],
-            title="AE Enc over epochs", savepath="plots/ae_lr.jpg")
+            title="AE Enc over epochs", savepath=f"{self.log_dir}/ae_lr.jpg")
 
     def eval_enc(self, threshold: float = 0.5):
         """Evaluate the Deep SVDD encoder model"""
@@ -199,9 +198,11 @@ class TrainerDeepSVDD:
         y_trues = torch.cat(y_trues).numpy()
         y_preds = torch.cat(y_preds).numpy()
         z_embs = torch.cat(z_embs).numpy()
-        print(f"ROC AUC score: {roc_auc_score(y_trues, y_scores)*100:.2f}")
-        print(f"Accuracy score: {accuracy_score(y_trues, y_preds)*100:.2f}")
+        print(f"ROC AUC score: {
+            roc_auc_score(y_trues, y_scores)*100:.2f}")
+        print(f"Accuracy score: {
+            accuracy_score(y_trues, y_preds)*100:.2f}")
         print(f"Balanced accuracy score: {
-              balanced_accuracy_score(y_trues, y_preds)*100:.2f}")
+            balanced_accuracy_score(y_trues, y_preds)*100:.2f}")
 
         return y_trues, y_scores, y_preds, z_embs

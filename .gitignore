@@ -164,6 +164,7 @@ cython_debug/
 # MacOS system files
 .DS_Store
 
-# weights and data dir
+# weights, data and logs dir
 weights/*
 data/*
+logs/
