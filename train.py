@@ -1,5 +1,7 @@
 import os
 import argparse
+import json
+from datetime import datetime
 import torch
 import pandas as pd
 import numpy as np
@@ -7,6 +9,19 @@ import numpy as np
 from deepsvdd.trainer import TrainerDeepSVDD
 from deepsvdd.preprocess import get_mnist_dls
 from deepsvdd.utils.plots import plot_in_out_dist, plot_tsne_2d, plot_scatter_loss
+
+
+def save_args(args, save_path: str):
+    """
+    Convert args to a dictionary and save to JSON and save to file
+    """
+    args_dict = vars(args)  # Convert argparse Namespace to dictionary
+
+    # Save args_dict to a JSON file
+    with open(save_path, 'w', encoding="utf-8") as f:
+        json.dump(args_dict, f, indent=4)
+
+    print(f"Train+test settings saved to {save_path}")
 
 
 def parse_args():
@@ -40,23 +55,28 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+
     # check if cuda is available.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    log_dir = "logs/" + datetime.now().strftime("%Y_%m_%d-%H_%M")
+    os.makedirs(log_dir, exist_ok=True)
+    # save the train/test args
+    save_args(args, save_path=f"{log_dir}/args.json")
+
     dls = get_mnist_dls(args)
-    deep_SVDD = TrainerDeepSVDD(args, dls, device)
+    deep_SVDD = TrainerDeepSVDD(args, dls, log_dir=log_dir, device=device)
     # pretrain with autoencoder
     if args.pretrain:
         deep_SVDD.pretrain()
         # eval autoencoder
         recons_losses, y_trues = deep_SVDD.eval_ae()
         plot_scatter_loss(recons_losses, y_trues,
-                          savepath="plots/recons_test_losses_ae.jpg")
+                          savepath=f"{log_dir}/recons_test_losses_ae.jpg")
 
     # train encoder only
     deep_SVDD.train()
 
-    os.makedirs('./plots', exist_ok=True)
     # evaluate encoder
     thres = deep_SVDD.calc_threshold_score(
         deep_SVDD.train_loader, deep_SVDD.encoder)
@@ -69,11 +89,11 @@ if __name__ == "__main__":
     in_ = pd.DataFrame(scores_in, columns=['Inlier'])
     out_ = pd.DataFrame(scores_out, columns=['Outlier'])
     plot_in_out_dist(in_, out_,
-                     savepath="plots/outlier_scores_deep_svdd.jpg")
+                     savepath=f"{log_dir}/outlier_scores_deep_svdd.jpg")
     # plot the t-sne plots
     plot_tsne_2d(z_embs, y_trues,
-                 savepath="plots/tsne_mnist_true.jpg",
+                 savepath=f"{log_dir}/tsne_mnist_true.jpg",
                  title="t-SNE - MNIST")
     plot_tsne_2d(z_embs, y_preds,
-                 savepath="plots/tsne_mnist_pred.jpg",
+                 savepath=f"{log_dir}/tsne_mnist_pred.jpg",
                  title="t-SNE - MNIST")
