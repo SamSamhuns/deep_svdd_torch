@@ -11,29 +11,29 @@ from deepsvdd.utils.plots import plot_in_out_dist
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_epochs", type=int, default=150,
-                        help="number of epochs")
+                        help="number of epochs (default: %(default)s)")
     parser.add_argument("--num_epochs_ae", type=int, default=150,
-                        help="number of epochs for the pretraining")
+                        help="number of epochs for the pretraining (default: %(default)s)")
     parser.add_argument("--patience", type=int, default=50,
-                        help="Patience for Early Stopping")
+                        help="Patience for Early Stopping (default: %(default)s)")
     parser.add_argument("--lr", type=float, default=1e-4,
-                        help="learning rate")
+                        help="learning rate (default: %(default)s)")
     parser.add_argument("--weight_decay", type=float, default=0.5e-6,
-                        help="Weight decay hyperparameter for the L2 regularization")
+                        help="Weight decay hyperparameter for the L2 reg (default: %(default)s)")
     parser.add_argument("--weight_decay_ae", type=float, default=0.5e-3,
-                        help="Weight decay hyperparameter for the L2 regularization")
+                        help="Weight decay hyperparameter for the L2 reg in AE (default: %(default)s)")
     parser.add_argument("--lr_ae", type=float, default=1e-4,
-                        help="learning rate for autoencoder")
+                        help="learning rate for autoencoder (default: %(default)s)")
     parser.add_argument("--lr_milestones", type=list, default=[50],
-                        help="Milestones at which the scheduler multiply the lr by 0.1")
+                        help="Milestones at which the scheduler mults the lr by 0.1 (default: %(default)s)")
     parser.add_argument("--batch_size", type=int, default=200,
-                        help="Batch size")
+                        help="Batch size (default: %(default)s)")
     parser.add_argument("--pretrain", type=bool, default=True,
-                        help="Pretrain the network using an autoencoder")
+                        help="Pretrain the network using an autoencoder (default: %(default)s)")
     parser.add_argument("--latent_dim", type=int, default=32,
-                        help="Dimension of the latent variable z")
+                        help="Dimension of the latent variable z (default: %(default)s)")
     parser.add_argument("--normal_class", type=int, default=0,
-                        help="Class to be treated as normal. The rest will be set as anomalous.")
+                        help="Class to be treated as normal; the rest is set as anomalous (default: %(default)s)")
     # parsing arguments.
     args = parser.parse_args()
     return args
